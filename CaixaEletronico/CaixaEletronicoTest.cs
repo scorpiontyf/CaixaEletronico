@@ -1,62 +1,106 @@
-namespace CaixaEletronico
+using Moq;
+using Xunit;
+
+namespace CaixaEletronico.Tests
 {
     public class CaixaEletronicoTest
     {
-        ContaCorrente contaCorrente;
-        CaixaEletronico caixaEletronico;
+        private readonly Mock<IServicoRemoto> servicoMock;
+        private readonly Mock<IHardware> hardwareMock;
+        private readonly CaixaEletronico caixa;
+        private readonly ContaCorrente contaMock;
+
         public CaixaEletronicoTest()
         {
-            contaCorrente = new ContaCorrente
+            servicoMock = new Mock<IServicoRemoto>();
+            hardwareMock = new Mock<IHardware>();
+
+            contaMock = new ContaCorrente
             {
                 Conta = "123",
-                Saldo = 200000
+                Saldo = 200
             };
-            caixaEletronico = new CaixaEletronico
-            {
-                Conta = contaCorrente,
-            };
+
+            caixa = new CaixaEletronico(servicoMock.Object, hardwareMock.Object);
         }
 
         [Fact]
         public void LogarComSucesso()
         {
-            var login = caixaEletronico.Logar("123");
-            Assert.Equal("Usuário Autenticado", login);
+            hardwareMock.Setup(h => h.PegarNumeroDaContaCartao()).Returns("123");
+            servicoMock.Setup(s => s.RecuperarConta("123")).Returns(contaMock);
+
+            var resultado = caixa.Logar();
+
+            Assert.Equal("Usuário Autenticado", resultado);
         }
-        
+
         [Fact]
         public void LogarComFalha()
         {
-            var ex = Assert.Throws<Exception>(() => caixaEletronico.Logar("321"));
-            Assert.Equal("Não foi possível autenticar o usuário", ex.Message);
+            hardwareMock.Setup(h => h.PegarNumeroDaContaCartao()).Throws(new Exception());
+
+            var resultado = caixa.Logar();
+
+            Assert.Equal("Não foi possível autenticar o usuário", resultado);
         }
 
         [Fact]
         public void SacarComSucesso()
         {
-            Assert.Equal("Retire seu dinheiro!", caixaEletronico.Sacar(1000));
+            LogarComSucesso();
+
+            var resultado = caixa.Sacar(100);
+
+            Assert.Equal("Retire seu dinheiro", resultado);
+            servicoMock.Verify(s => s.PersistirConta(It.Is<ContaCorrente>(c => c.Saldo == 100)), Times.Once);
+            hardwareMock.Verify(h => h.EntregarDinheiro(), Times.Once);
         }
-        
+
         [Fact]
-        public void SacarComFalha()
+        public void SacarComFalha_PorSaldoInsuficiente()
         {
-            Assert.Equal("Saldo insuficiente.", caixaEletronico.Sacar(1000000));
+            LogarComSucesso();
+
+            var resultado = caixa.Sacar(500);
+
+            Assert.Equal("Saldo insuficiente", resultado);
+            servicoMock.Verify(s => s.PersistirConta(It.IsAny<ContaCorrente>()), Times.Never);
+            hardwareMock.Verify(h => h.EntregarDinheiro(), Times.Never);
         }
 
         [Fact]
         public void DepositarComSucesso()
         {
-            var saldoAntigo = caixaEletronico.Conta.Saldo;
-            Assert.Equal("Depósito recebido com sucesso!", caixaEletronico.Depositar(1000));
-            Assert.True(caixaEletronico.Conta.Saldo == saldoAntigo + 1000);
+            LogarComSucesso();
+            hardwareMock.Setup(h => h.LerEnvelope());
+
+            var resultado = caixa.Depositar();
+
+            Assert.Equal("Depósito recebido com sucesso", resultado);
+            servicoMock.Verify(s => s.PersistirConta(It.IsAny<ContaCorrente>()), Times.Once);
         }
 
         [Fact]
         public void DepositarComFalha()
         {
-            var saldoAntigo = caixaEletronico.Conta.Saldo;
-            Assert.Equal("Valor inválido!", caixaEletronico.Depositar(-10));
-            Assert.True(caixaEletronico.Conta.Saldo != saldoAntigo - 10);
+            LogarComSucesso();
+            hardwareMock.Setup(h => h.LerEnvelope()).Throws(new Exception());
+
+            var resultado = caixa.Depositar();
+
+            Assert.Equal("Falha ao receber envelope", resultado);
+            servicoMock.Verify(s => s.PersistirConta(It.IsAny<ContaCorrente>()), Times.Never);
+        }
+
+        [Fact]
+        public void DeveRetornarSaldoFormatado()
+        {
+            LogarComSucesso();
+
+            var resultado = caixa.Saldo();
+
+            Assert.Equal("O saldo é R$200,00", resultado);
         }
     }
 }

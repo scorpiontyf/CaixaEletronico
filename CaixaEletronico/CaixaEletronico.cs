@@ -8,76 +8,61 @@ namespace CaixaEletronico
 {
     public class CaixaEletronico
     {
-        public ContaCorrente Conta { get; set; } = new ContaCorrente();
-        /*
-          logar(), sacar(), depositar() e saldo() e todas retornam uma String com a mensagem que será exibida na tela do caixa eletrônico.
-         */
-        //Ao executar o método login(), e a execução for com sucesso, deve retornar a mensagem "Usuário Autenticado".
-        //Caso falhe, deve retornar "Não foi possível autenticar o usuário"
-        public string Logar(string conta)
+        private readonly IServicoRemoto servico;
+        private readonly IHardware hardware;
+        private ContaCorrente conta;
+
+        public CaixaEletronico(IServicoRemoto servico, IHardware hardware)
+        {
+            this.servico = servico;
+            this.hardware = hardware;
+        }
+
+        public string Logar()
         {
             try
             {
-                if (conta != this.Conta.Conta) throw new Exception();
-                
+                var numeroConta = hardware.PegarNumeroDaContaCartao();
+                conta = servico.RecuperarConta(numeroConta);
                 return "Usuário Autenticado";
             }
-            catch (Exception ex) 
+            catch
             {
-                throw new Exception("Não foi possível autenticar o usuário");
+                return "Não foi possível autenticar o usuário";
             }
         }
-        //Ao executar o método sacar(), e a execução for com sucesso, deve retornar a mensagem "Retire seu dinheiro".
-        //Se o valor sacado for maior que o saldo da conta, a classe CaixaEletronico deve retornar uma String dizendo "Saldo insuficiente".
+
         public string Sacar(decimal valor)
         {
-            if(this.Conta.Saldo > valor)
+            if (conta.Saldo >= valor)
             {
-                return "Retire seu dinheiro!";
+                conta.Saldo -= valor;
+                hardware.EntregarDinheiro();
+                servico.PersistirConta(conta);
+                return "Retire seu dinheiro";
             }
-            return "Saldo insuficiente.";
+            return "Saldo insuficiente";
         }
 
-        //Ao executar o método depositar(), e a execução for com sucesso, deve retornar a mensagem "Depósito recebido com sucesso"
-        public string Depositar(decimal valor)
+        public string Depositar()
         {
-            if(valor > 0)
+            try
             {
-                this.Conta.Saldo += valor;
-                return "Depósito recebido com sucesso!";
+                hardware.LerEnvelope();
+                conta.Saldo += 100; // valor de exemplo
+                servico.PersistirConta(conta);
+                return "Depósito recebido com sucesso";
             }
-
-            return "Valor inválido!";
+            catch
+            {
+                return "Falha ao receber envelope";
+            }
         }
-        //Ao executar o método saldo(), a mensagem retornada deve ser "O saldo é R$xx,xx" com o valor do saldo.
+
         public string Saldo()
         {
-            return $"O saldo é de R${Conta.Saldo}";
-        }
-
-        public ContaCorrente PegarNumeroDaContaCartao(string conta)
-        {
-            if (conta == this.Conta.Conta)
-            {
-                return this.Conta;
-            }
-
-            return new ContaCorrente();
-        }
-
-        public void EntregarDinheiro(decimal valor)
-        {
-             Console.WriteLine("Dinheiro entregue");
-        }
-
-        public void LerEnvelope(decimal valor)
-        {
-            Console.WriteLine("Envelope recebido");
-        }
-
-        public string PegarNumeroDaContaCartao(int numeroConta)
-        {
-            return this.Conta.Conta;
+            return $"O saldo é R${conta.Saldo:0.00}";
         }
     }
+
 }
