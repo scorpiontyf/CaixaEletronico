@@ -160,6 +160,7 @@ ndepend-out/
 
 # VS Code
 .vscode/
+.vs/
 .history/
 
 # Windows image file caches
